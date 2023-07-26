@@ -5,10 +5,11 @@ SHELL:=/bin/bash
 CURRENT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
 
-DEVICE?=CPU
+DEVICE?=GPU
 MODEL_SIZE?=m
 MODEL_NAME=yolov8${MODEL_SIZE}
 DATA_TYPE?=FP16
+INPUT?=/dev/video0
 #----------------------------------------------------------------------------------------------------------------------
 # Docker Settings
 #----------------------------------------------------------------------------------------------------------------------
@@ -20,6 +21,7 @@ DOCKER_RUN_PARAMS= \
 	--privileged -v /dev:/dev \
 	-v ${CURRENT_DIR}/models:/workspace/models \
 	-v ${CURRENT_DIR}/videos:/workspace/videos \
+	-v /tmp/.X11-unix:/tmp/.X11-unix  -v ${HOME}/.Xauthority:/home/root/.Xauthority \
 	${DOCKER_IMAGE_NAME}
 	
 #----------------------------------------------------------------------------------------------------------------------
@@ -44,7 +46,7 @@ ir: fetch
 		python3 ./utils/mo.py --model=./models/${MODEL_NAME}/${MODEL_NAME}.pt --data_type="${DATA_TYPE}" && \
 		 mv ./models/${MODEL_NAME}/${MODEL_NAME}_openvino_model ./models/${MODEL_NAME}/${DATA_TYPE}'
 	
-benchmark: 
+benchmark: ir
 	@$(call msg, Benchmarking the ${MODEL_NAME} model ...)
 	@docker run ${DOCKER_RUN_PARAMS} bash -c '\
 		benchmark_app \
@@ -53,6 +55,14 @@ benchmark:
 				-d ${DEVICE} \
 				-t 10 '
 
+demo: build fetch
+	@$(call msg, Running the yolov8 object detection demo ...)
+	@xhost +
+	@docker run ${DOCKER_RUN_PARAMS} \
+		python3 ./main.py  \
+				--model ./models/${MODEL_NAME}/${MODEL_NAME}.pt \
+				--device ${DEVICE} \
+				--input ${INPUT}
 #----------------------------------------------------------------------------------------------------------------------
 # helper functions
 #----------------------------------------------------------------------------------------------------------------------
